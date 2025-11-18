@@ -7,7 +7,6 @@ import {
   X,
   Instagram,
   Phone,
-  ChevronDown,
   Check,
   Minus,
   Plus,
@@ -30,13 +29,36 @@ const CONFIG = {
     "https://images.unsplash.com/photo-1578985545062-69928b1d9587?w=1200&h=600&fit=crop",
 };
 
+// Types
+type Item = {
+  id: string | number;
+  name: string;
+  description: string;
+  price: string;
+  weight?: string;
+  image: string;
+  category?: string;
+};
+
+type OrderMap = Record<
+  string,
+  { item: Item; quantity: number; notes?: string }
+>;
+
+interface ToastProps {
+  message: string;
+  show: boolean;
+  onClose: () => void;
+}
+
 // Toast Component
-const Toast = ({ message, show, onClose }) => {
+const Toast: React.FC<ToastProps> = ({ message, show, onClose }) => {
   useEffect(() => {
     if (show) {
-      const timer = setTimeout(onClose, 3000);
-      return () => clearTimeout(timer);
+      const timer = window.setTimeout(onClose, 3000);
+      return () => window.clearTimeout(timer);
     }
+    return undefined;
   }, [show, onClose]);
 
   if (!show) return null;
@@ -50,7 +72,11 @@ const Toast = ({ message, show, onClose }) => {
 };
 
 // Quantity Control Component
-const QuantityControl = ({ quantity, onIncrease, onDecrease }) => {
+const QuantityControl: React.FC<{
+  quantity: number;
+  onIncrease: () => void;
+  onDecrease: () => void;
+}> = ({ quantity, onIncrease, onDecrease }) => {
   return (
     <div className="flex items-center gap-2 bg-gray-100 rounded-lg p-1">
       <button
@@ -74,7 +100,11 @@ const QuantityControl = ({ quantity, onIncrease, onDecrease }) => {
 };
 
 // Menu Item Card Component
-const MenuItemCard = ({ item, quantity, onQuantityChange }) => {
+const MenuItemCard: React.FC<{
+  item: Item;
+  quantity: number;
+  onQuantityChange: (id: string | number, quantity: number) => void;
+}> = ({ item, quantity, onQuantityChange }) => {
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow">
       <img
@@ -106,7 +136,7 @@ const MenuItemCard = ({ item, quantity, onQuantityChange }) => {
 };
 
 // Header Component
-const Header = ({ onOrderClick }) => {
+const Header: React.FC<{ onOrderClick: () => void }> = ({ onOrderClick }) => {
   return (
     <header className="bg-white shadow-sm sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -148,7 +178,7 @@ const Header = ({ onOrderClick }) => {
 };
 
 // Hero Component
-const Hero = ({ onViewMenu }) => {
+const Hero: React.FC<{ onViewMenu: () => void }> = ({ onViewMenu }) => {
   return (
     <div className="relative h-96 bg-gradient-to-br from-pink-100 to-purple-100 overflow-hidden">
       <img
@@ -172,7 +202,19 @@ const Hero = ({ onViewMenu }) => {
 };
 
 // Order Preview Component
-const OrderPreview = ({
+const OrderPreview: React.FC<{
+  order: OrderMap;
+  customerInfo: { name: string; date: string };
+  onCustomerInfoChange: (
+    field: string,
+    value: string,
+    itemId?: string | null
+  ) => void;
+  onCopyOrder: () => void;
+  onWhatsAppShare: () => void;
+  onClose: () => void;
+  isOpen: boolean;
+}> = ({
   order,
   customerInfo,
   onCustomerInfoChange,
@@ -181,12 +223,12 @@ const OrderPreview = ({
   onClose,
   isOpen,
 }) => {
-  const orderItems = Object.entries(order).filter(
-    ([_, data]) => data.quantity > 0
+  const orderItems = Object.entries(order).filter(([, data]) =>
+    Boolean(data && data.quantity > 0)
   );
   const hasItems = orderItems.length > 0;
 
-  const totalAmount = orderItems.reduce((sum, [_, data]) => {
+  const totalAmount = orderItems.reduce((sum, [, data]) => {
     const priceStr = data.item.price.replace(/[^0-9]/g, "");
     const price = parseInt(priceStr) || 0;
     return sum + price * data.quantity;
@@ -362,38 +404,55 @@ const OrderPreview = ({
 
 // Main App Component
 export default function BakeryQuickOrder() {
-  const [order, setOrder] = useState({});
-  const [customerInfo, setCustomerInfo] = useState({ name: "", date: "" });
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("All");
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState("");
-  const [isOrderPreviewOpen, setIsOrderPreviewOpen] = useState(false);
-  const menuRef = useRef(null);
+  const [order, setOrder] = useState<OrderMap>({});
+  const [customerInfo, setCustomerInfo] = useState<{
+    name: string;
+    date: string;
+  }>({ name: "", date: "" });
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("All");
+  const [showToast, setShowToast] = useState<boolean>(false);
+  const [toastMessage, setToastMessage] = useState<string>("");
+  const [isOrderPreviewOpen, setIsOrderPreviewOpen] = useState<boolean>(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
 
-  const handleQuantityChange = (itemId, quantity) => {
+  const handleQuantityChange = (
+    itemId: string | number,
+    quantity: number
+  ): void => {
     const item = MENU_DATA.items.find((i) => i.id === itemId);
+    if (!item) return;
+    const key = String(itemId);
     setOrder((prev) => ({
       ...prev,
-      [itemId]: { item, quantity, notes: prev[itemId]?.notes || "" },
+      [key]: { item: item as Item, quantity, notes: prev[key]?.notes || "" },
     }));
   };
 
-  const handleCustomerInfoChange = (field, value, itemId = null) => {
-    if (field === "note" && itemId) {
-      setOrder((prev) => ({
-        ...prev,
-        [itemId]: { ...prev[itemId], notes: value },
-      }));
+  const handleCustomerInfoChange = (
+    field: string,
+    value: string,
+    itemId: string | number | null = null
+  ): void => {
+    if (field === "note" && itemId != null) {
+      const key = String(itemId);
+      setOrder((prev) => {
+        const existing = prev[key];
+        if (!existing) return prev;
+        return { ...prev, [key]: { ...existing, notes: value } };
+      });
     } else {
-      setCustomerInfo((prev) => ({ ...prev, [field]: value }));
+      setCustomerInfo(
+        (prev) =>
+          ({ ...prev, [field]: value } as { name: string; date: string })
+      );
     }
   };
 
   // Compose order text for clipboard
   const composeOrderText = () => {
-    const orderItems = Object.entries(order).filter(
-      ([_, data]) => data.quantity > 0
+    const orderItems = Object.entries(order).filter(([, data]) =>
+      Boolean(data && data.quantity > 0)
     );
 
     let orderText = `🧁 NEW ORDER - ${CONFIG.bakeryName}\n\n`;
@@ -404,7 +463,7 @@ export default function BakeryQuickOrder() {
     orderText += `\n📝 ORDER DETAILS:\n`;
     orderText += `${"─".repeat(30)}\n\n`;
 
-    orderItems.forEach(([_, data], index) => {
+    orderItems.forEach(([, data], index) => {
       orderText += `${index + 1}. ${data.item.name}\n`;
       orderText += `   Qty: ${data.quantity} | Price: ${data.item.price}\n`;
       if (data.notes) {
@@ -413,7 +472,7 @@ export default function BakeryQuickOrder() {
       orderText += `\n`;
     });
 
-    const total = orderItems.reduce((sum, [_, data]) => {
+    const total = orderItems.reduce((sum, [, data]) => {
       const priceStr = data.item.price.replace(/[^0-9]/g, "");
       const price = parseInt(priceStr) || 0;
       return sum + price * data.quantity;
@@ -483,7 +542,7 @@ export default function BakeryQuickOrder() {
 
   // Check if order has items (for mobile cart button)
   const orderItemCount = Object.values(order).reduce(
-    (sum, data) => sum + data.quantity,
+    (sum, data) => sum + (data?.quantity || 0),
     0
   );
 
@@ -535,7 +594,7 @@ export default function BakeryQuickOrder() {
                   <MenuItemCard
                     key={item.id}
                     item={item}
-                    quantity={order[item.id]?.quantity || 0}
+                    quantity={order[String(item.id)]?.quantity || 0}
                     onQuantityChange={handleQuantityChange}
                   />
                 ))}
@@ -599,7 +658,7 @@ export default function BakeryQuickOrder() {
         onClose={() => setShowToast(false)}
       />
 
-      <style jsx>{`
+      <style>{`
         @keyframes slideUp {
           from {
             transform: translateY(100%);
